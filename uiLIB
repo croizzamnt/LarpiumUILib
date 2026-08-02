@@ -1057,6 +1057,7 @@ function Library:CreateWindow(options)
                     clamp(candidate.X, 580, max(580, viewportNow.X - self._targetPosition.X)),
                     clamp(candidate.Y, 420, max(420, viewportNow.Y - self._targetPosition.Y))
                 )
+                self:_updateThemeEditorPosition()
             end)
         end,
     }
@@ -1355,15 +1356,20 @@ function Window:_render(deltaTime)
     local radius = settings.Radius
     local sidebarWidth = size.X < 720 and 58 or clamp(settings.SidebarWidth, 150, size.X * 0.34)
     self._compactSidebar = size.X < 720
+    local ta = self.ThemeTransparency or {}
+    local bgAlpha = alpha * (ta.Background or 1)
+    local sidebarAlpha = alpha * (ta.Sidebar or 1)
+    local headerAlpha = alpha * (ta.Header or 1)
+    local shadowAlpha = alpha * (ta.Shadow or 1) * 0.42
 
-    self._shellShadow:Set(position + vector(0, 8), size, radius + 2, theme.Shadow, alpha * 0.42, baseZ + 1, true)
+    self._shellShadow:Set(position + vector(0, 8), size, radius + 2, theme.Shadow, shadowAlpha, baseZ + 1, true)
     self._shellBorder:Set(position - vector(1, 1), size + vector(2, 2), radius + 1, theme.Border, alpha, baseZ + 2, true)
-    self._shell:Set(position, size, radius, theme.Background, alpha, baseZ + 3, true)
+    self._shell:Set(position, size, radius, theme.Background, bgAlpha, baseZ + 3, true)
 
     local sidebar = namedDrawing(self, "window:sidebar", "Square", { Filled = true })
-    showSquare(sidebar, rect(position.X, position.Y, sidebarWidth, size.Y), theme.Sidebar, alpha, baseZ + 4)
+    showSquare(sidebar, rect(position.X, position.Y, sidebarWidth, size.Y), theme.Sidebar, sidebarAlpha, baseZ + 4)
     local header = namedDrawing(self, "window:header", "Square", { Filled = true })
-    showSquare(header, rect(position.X + sidebarWidth, position.Y, size.X - sidebarWidth, settings.HeaderHeight), theme.Header, alpha, baseZ + 4)
+    showSquare(header, rect(position.X + sidebarWidth, position.Y, size.X - sidebarWidth, settings.HeaderHeight), theme.Header, headerAlpha, baseZ + 4)
     local sidebarDivider = namedDrawing(self, "window:sidebarDivider", "Line")
     showLine(sidebarDivider, position + vector(sidebarWidth, 0), position + vector(sidebarWidth, size.Y), theme.BorderSoft, alpha, 1, baseZ + 7)
     local headerDivider = namedDrawing(self, "window:headerDivider", "Line")
@@ -1468,6 +1474,7 @@ function Window:_render(deltaTime)
         })
     end
 
+    self:_renderThemeEditor(deltaTime, baseZ + 400, alpha)
     self:_renderOverlay(deltaTime, baseZ + 500, alpha)
     self:_renderModal(deltaTime, baseZ + 700, alpha)
     self:_renderNotifications(deltaTime, baseZ + 800, alpha)
@@ -1475,7 +1482,6 @@ function Window:_render(deltaTime)
     self:_renderWatermark(baseZ + 950, self._watermark and not self._watermark.FollowWindowVisibility and settings.Opacity or alpha)
     self:_renderKeybindList(baseZ + 960, self._keybindList and not self._keybindList.FollowWindowVisibility and settings.Opacity or alpha)
     self:_renderStatsOverlay(baseZ + 970, self._statsOverlay and not self._statsOverlay.FollowWindowVisibility and settings.Opacity or alpha)
-    self:_renderThemeEditor(deltaTime, baseZ + 980, alpha)
 end
 
 function Window:AddTab(options)
@@ -2397,9 +2403,21 @@ function Section:AddToggleButton(options)
     function element:_render(context, targetRect)
         if not fullyInsideVertical(targetRect, context.Clip) then return end
         self:_card(context, targetRect, self.Value)
+        local right = targetRect.X + targetRect.W - 12
+        local trackRect = rect(right - 40, targetRect.Y + floor((targetRect.H - 22) / 2), 40, 22)
+        local track = self:_drawing("toggleButton:track", "Square", { Filled = true })
+        showSquare(track, trackRect, self.Value and context.Theme.Accent or context.Theme.ToggleOff, context.Alpha, context.Z + 15)
+        self._active = animateNumber(self._active or 0, self.Value and 1 or 0, context.Factor)
+        local knob = self:_drawing("toggleButton:knob", "Circle", { Filled = true, NumSides = 20 })
+        setDrawing(knob, {
+            Position = vector(trackRect.X + 11 + self._active * 18, trackRect.Y + 11),
+            Radius = 7, Filled = true, NumSides = 20,
+            Color = context.Theme.Text, Transparency = context.Alpha,
+            ZIndex = context.Z + 17, Visible = true,
+        })
         local text = self:_drawing("toggleButton:text", "Text")
         local caption = self.Value and (options.ActiveText or self.Name) or (options.InactiveText or self.Name)
-        showText(text, caption, vector(targetRect.X + targetRect.W / 2, targetRect.Y + floor((targetRect.H - context.Settings.FontSize) / 2) - 1), self.Value and context.Theme.Text or context.Theme.TextSecondary, context.Settings.FontSize, context.Settings.Font, context.Alpha, context.Z + 16, true)
+        showText(text, caption, vector(targetRect.X + 12, targetRect.Y + floor((targetRect.H - context.Settings.FontSize) / 2) - 1), self.Value and context.Theme.Text or context.Theme.TextSecondary, context.Settings.FontSize, context.Settings.Font, context.Alpha, context.Z + 16, false, true)
         self:_registerMain(context, targetRect)
     end
     if element.Flag then self._window.Flags[element.Flag] = element.Value end
@@ -3797,7 +3815,7 @@ function Window:_renderKeybindList(zIndex, alpha)
         width = max(width, estimateTextWidth(binding.Name, self.Settings.SmallFontSize) + estimateTextWidth(enumName(binding.Key) .. "  " .. binding.Mode, self.Settings.SmallFontSize) + 62)
     end
     width = min(width, 340)
-    local headerHeight, rowHeight = 32, 26
+    local headerHeight, rowHeight = 32, 30
     local height = headerHeight + rowCount * rowHeight + 6
     local viewport = viewportSize()
     if not widget._positionReady then
@@ -3814,9 +3832,9 @@ function Window:_renderKeybindList(zIndex, alpha)
     showSquare(border, bounds, self.Theme.Border, alpha, zIndex + 1, false, 1)
     showSquare(header, rect(bounds.X, bounds.Y, bounds.W, headerHeight), self.Theme.Header, alpha, zIndex + 2)
     local title = namedDrawing(widget, "keylist:title", "Text")
-    showText(title, widget.Title, vector(bounds.X + 11, bounds.Y + 9), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, alpha, zIndex + 4)
+    showText(title, widget.Title, vector(bounds.X + 11, bounds.Y + 9), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, alpha, zIndex + 4, false, true)
     local count = namedDrawing(widget, "keylist:count", "Text")
-    showText(count, tostring(#bindings), vector(bounds.X + bounds.W - 18, bounds.Y + 9), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 4, true)
+    showText(count, tostring(#bindings), vector(bounds.X + bounds.W - 18, bounds.Y + 9), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 4, true, true)
     widget.HeaderRegion.Rect = rect(bounds.X, bounds.Y, bounds.W, headerHeight)
     widget.HeaderRegion.Z = zIndex + 20
     registerRegion(self, widget.HeaderRegion)
@@ -3827,7 +3845,7 @@ function Window:_renderKeybindList(zIndex, alpha)
     widget.Scroll = clamp(floor(widget.Scroll + 0.5), 0, maxScroll)
     if #bindings == 0 then
         local empty = namedDrawing(widget, "keylist:empty", "Text")
-        showText(empty, "No keybinds assigned", vector(bounds.X + 11, bounds.Y + headerHeight + 8), self.Theme.TextDisabled, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 4)
+        showText(empty, "No keybinds assigned", vector(bounds.X + 11, bounds.Y + headerHeight + 8), self.Theme.TextDisabled, self.Settings.FontSize, self.Settings.Font, alpha, zIndex + 4, false, true)
         return
     end
     for visualIndex = 1, widget.MaxVisibleRows do
@@ -3842,17 +3860,17 @@ function Window:_renderKeybindList(zIndex, alpha)
         if binding.Active then
             local dot = namedDrawing(widget, "keylist:dot:" .. visualIndex, "Circle", { Filled = true, NumSides = 16 })
             setDrawing(dot, {
-                Position = vector(rowRect.X + 7, rowRect.Y + rowRect.H / 2), Radius = 3, NumSides = 16,
+                Position = vector(rowRect.X + 7, rowRect.Y + rowRect.H / 2), Radius = 3.5, NumSides = 16,
                 Thickness = 1, Filled = true, Color = self.Theme.Accent, Transparency = alpha,
                 ZIndex = zIndex + 6, Visible = true,
             })
         end
         local name = namedDrawing(widget, "keylist:name:" .. visualIndex, "Text")
-        showText(name, trimText(binding.Name, rowRect.W * 0.56, self.Settings.SmallFontSize), vector(rowRect.X + 16, rowRect.Y + 6), binding.Active and self.Theme.Accent or self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 6)
+        showText(name, trimText(binding.Name, rowRect.W * 0.55, self.Settings.FontSize), vector(rowRect.X + 16, rowRect.Y + 7), binding.Active and self.Theme.Accent or self.Theme.Text, self.Settings.FontSize, self.Settings.Font, alpha, zIndex + 6, false, true)
         local suffixMode = string.lower(binding.Mode) == "hold" and "Hold" or (string.lower(binding.Mode) == "always" and "Always" or "Toggle")
         local suffix = enumName(binding.Key) .. "  " .. suffixMode
         local suffixDrawing = namedDrawing(widget, "keylist:suffix:" .. visualIndex, "Text")
-        showText(suffixDrawing, suffix, vector(rowRect.X + rowRect.W - estimateTextWidth(suffix, self.Settings.SmallFontSize) - 7, rowRect.Y + 6), binding.Active and self.Theme.Accent or self.Theme.TextDisabled, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 6)
+        showText(suffixDrawing, suffix, vector(rowRect.X + rowRect.W - estimateTextWidth(suffix, self.Settings.SmallFontSize) - 7, rowRect.Y + 7), binding.Active and self.Theme.Accent or self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 6, false, true)
         local region = widget.RowRegions[visualIndex]
         if not region then
             region = {
@@ -4038,6 +4056,62 @@ Library.NativeFonts = {
     Monospace = 3,
 }
 Library.CustomFonts = {}
+Library.FontCacheFolder = "UILibSuprema/fonts"
+
+function Library:LoadFont(url, name, fallback)
+    name = tostring(name or "custom")
+    fallback = fallback or self.NativeFonts.Plex
+    local filepath = self.FontCacheFolder .. "/" .. name .. ".ttf"
+    local fontObj
+    local okCreate, obj = pcall(function() return Drawing.new("Font") end)
+    if okCreate and obj then
+        fontObj = obj
+    else
+        return fallback
+    end
+    local function tryApply(data)
+        if not data or #data == 0 then return false end
+        return pcall(function() fontObj.Data = data end)
+    end
+    if type(isfile) == "function" and isfile(filepath) then
+        local ok, data = pcall(readfile, filepath)
+        if ok and tryApply(data) then
+            self.CustomFonts[name] = { Font = fontObj, Fallback = fallback, Url = url }
+            return fontObj
+        end
+    end
+    local okFetch, raw = pcall(function() return game:HttpGet(url) end)
+    if okFetch and raw and #raw > 0 then
+        pcall(function()
+            if type(isfolder) == "function" and not isfolder(self.FontCacheFolder) then makefolder(self.FontCacheFolder) end
+            if type(writefile) == "function" then writefile(filepath, raw) end
+        end)
+        local okRead, data = pcall(readfile, filepath)
+        if okRead and tryApply(data) then
+            self.CustomFonts[name] = { Font = fontObj, Fallback = fallback, Url = url }
+            return fontObj
+        end
+        if tryApply(raw) then
+            self.CustomFonts[name] = { Font = fontObj, Fallback = fallback, Url = url }
+            return fontObj
+        end
+    end
+    pcall(function() fontObj:Destroy() end)
+    return fallback
+end
+
+function Library:LoadAllFonts(regularUrl, monoUrl)
+    if regularUrl then
+        local regularFont = self:LoadFont(regularUrl, "Inter-Regular", self.NativeFonts.Plex)
+        self.Settings.Font = regularFont
+        Library.Settings.Font = regularFont
+    end
+    if monoUrl then
+        local monoFont = self:LoadFont(monoUrl, "Inter-Mono", self.NativeFonts.Monospace)
+        self.Settings.MonoFont = monoFont
+        Library.Settings.MonoFont = monoFont
+    end
+end
 
 function Library:ResolveFont(font)
     if type(font) == "number" then
@@ -4592,10 +4666,6 @@ function Window:_buildConfigTab()
         Description = "Runtime theme and rendering preferences.",
         Side = "Right",
     })
-    controls.Accent = appearance:AddColorPicker({
-        Name = "Accent color", Default = self.Theme.Accent, AllowAlpha = false, IgnoreConfig = true,
-        Callback = function(color) self:SetTheme({ Accent = color, AccentHover = colorLerp(color, Color3.new(1, 1, 1), 0.18) }) end,
-    })
     controls.Animations = appearance:AddToggle({
         Name = "Animations", Default = self.Settings.Animations, IgnoreConfig = true,
         Callback = function(value) self.Settings.Animations = value end,
@@ -4616,7 +4686,32 @@ function Window:_buildConfigTab()
         Name = "Menu toggle key", Default = self.Settings.ToggleKey, Mode = "Toggle", IgnoreConfig = true,
         OnKeyChanged = function(key) self.Settings.ToggleKey = key end,
     })
-
+    local themeOptions = {}
+    for name, _ in pairs(Library.Themes) do table.insert(themeOptions, name) end
+    table.sort(themeOptions)
+    controls.ThemeDropdown = appearance:AddDropdown({
+        Name = "Active theme", Options = themeOptions, Default = "Suprema", IgnoreConfig = true,
+        Callback = function(value)
+            Library:SetTheme(value)
+            if self._syncConfigControls then self:_syncConfigControls() end
+        end,
+    })
+    appearance:AddButton({
+        Name = "Refresh saved themes",
+        Callback = function()
+            Library:LoadSavedThemes()
+            local options = {}
+            for name, _ in pairs(Library.Themes) do table.insert(options, name) end
+            for name, _ in pairs(Library.SavedThemes) do
+                if not Library.Themes[name] then
+                    Library.Themes[name] = Library.SavedThemes[name]
+                end
+                table.insert(options, name)
+            end
+            table.sort(options)
+            controls.ThemeDropdown:SetOptions(options, true)
+        end,
+    })
     appearance:AddButton({
         Name = "Open Theme Editor",
         Description = "Adjust colors and transparency for every theme token.",
@@ -4669,7 +4764,6 @@ end
 function Window:_syncConfigControls(syncStorage)
     local controls = self._configControls
     if not controls then return end
-    if controls.Accent then controls.Accent:Set(self.Theme.Accent, 1, true) end
     if controls.Animations then controls.Animations:Set(self.Settings.Animations, true) end
     if controls.AnimationSpeed then controls.AnimationSpeed:Set(self.Settings.AnimationSpeed, true) end
     if controls.Radius then controls.Radius:Set(self.Settings.Radius, true) end
@@ -4684,78 +4778,175 @@ function Window:_syncConfigControls(syncStorage)
     end
 end
 
-local ThemeEditorTokens = {
-    { Key = "Background", Label = "Background" },
-    { Key = "BackgroundSecondary", Label = "Background Secondary" },
-    { Key = "Header", Label = "Header" },
-    { Key = "Sidebar", Label = "Sidebar" },
-    { Key = "Card", Label = "Card" },
-    { Key = "CardHover", Label = "Card Hover" },
-    { Key = "CardActive", Label = "Card Active" },
-    { Key = "Popup", Label = "Popup" },
-    { Key = "Overlay", Label = "Overlay" },
-    { Key = "Border", Label = "Border" },
-    { Key = "BorderSoft", Label = "Border Soft" },
-    { Key = "Text", Label = "Text" },
-    { Key = "TextSecondary", Label = "Text Secondary" },
-    { Key = "TextDisabled", Label = "Text Disabled" },
-    { Key = "Accent", Label = "Accent" },
-    { Key = "AccentHover", Label = "Accent Hover" },
-    { Key = "AccentMuted", Label = "Accent Muted" },
-    { Key = "ToggleOff", Label = "Toggle Off" },
-    { Key = "SliderTrack", Label = "Slider Track" },
-    { Key = "Input", Label = "Input" },
-    { Key = "Selection", Label = "Selection" },
-    { Key = "Success", Label = "Success" },
-    { Key = "Warning", Label = "Warning" },
-    { Key = "Error", Label = "Error" },
-    { Key = "Info", Label = "Info" },
-    { Key = "Shadow", Label = "Shadow" },
+local ThemeEditorColumns = {
+    { Title = "Surfaces", Tokens = {
+        { Key = "Background", Label = "Background" },
+        { Key = "BackgroundSecondary", Label = "Bg Secondary" },
+        { Key = "Header", Label = "Header" },
+        { Key = "Sidebar", Label = "Sidebar" },
+        { Key = "Card", Label = "Card" },
+        { Key = "CardHover", Label = "Card Hover" },
+        { Key = "CardActive", Label = "Card Active" },
+    }},
+    { Title = "Chrome", Tokens = {
+        { Key = "Popup", Label = "Popup" },
+        { Key = "Overlay", Label = "Overlay" },
+        { Key = "Border", Label = "Border" },
+        { Key = "BorderSoft", Label = "Border Soft" },
+        { Key = "Input", Label = "Input" },
+        { Key = "Selection", Label = "Selection" },
+        { Key = "Shadow", Label = "Shadow" },
+    }},
+    { Title = "Text & Accent", Tokens = {
+        { Key = "Text", Label = "Text" },
+        { Key = "TextSecondary", Label = "Text Sec." },
+        { Key = "TextDisabled", Label = "Text Dis." },
+        { Key = "Accent", Label = "Accent" },
+        { Key = "AccentHover", Label = "Accent Hov." },
+        { Key = "AccentMuted", Label = "Accent Mut." },
+    }},
+    { Title = "States", Tokens = {
+        { Key = "ToggleOff", Label = "Toggle Off" },
+        { Key = "SliderTrack", Label = "Slider Track" },
+        { Key = "Success", Label = "Success" },
+        { Key = "Warning", Label = "Warning" },
+        { Key = "Error", Label = "Error" },
+        { Key = "Info", Label = "Info" },
+    }},
 }
+
+local ThemeEditorTokenIndex = {}
+for colIdx, col in ipairs(ThemeEditorColumns) do
+    for rowIdx, token in ipairs(col.Tokens) do
+        ThemeEditorTokenIndex[token.Key] = { Col = colIdx, Row = rowIdx }
+    end
+end
+
+Library.SavedThemes = {}
+
+function Library:LoadSavedThemes()
+    if type(readfile) ~= "function" or type(isfile) ~= "function" then return end
+    local path = self.DefaultSettings.ConfigFolder .. "/saved_themes.json"
+    if not isfile(path) then return end
+    local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+    if ok and type(data) == "table" then
+        for name, themeData in pairs(data) do
+            if type(themeData) == "table" then
+                local resolved = {}
+                for key, val in pairs(themeData) do
+                    if type(val) == "table" and val.R and val.G and val.B then
+                        resolved[key] = Color3.new(val.R, val.G, val.B)
+                    elseif type(val) == "number" then
+                        resolved["__transparency_" .. key] = val
+                    end
+                end
+                self.SavedThemes[name] = resolved
+            end
+        end
+    end
+end
+
+function Library:SaveThemeToFile(name, themeData)
+    if type(writefile) ~= "function" then return false end
+    local folder = self.DefaultSettings.ConfigFolder
+    if type(isfolder) ~= "function" then return false end
+    if not isfolder(folder) then pcall(makefolder, folder) end
+    local path = folder .. "/saved_themes.json"
+    local existing = {}
+    if type(isfile) == "function" and isfile(path) then
+        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+        if ok and type(data) == "table" then existing = data end
+    end
+    local encoded = {}
+    for key, val in pairs(themeData) do
+        if typeof(val) == "Color3" then
+            encoded[key] = { R = val.R, G = val.G, B = val.B }
+        elseif type(val) == "number" then
+            encoded[key] = val
+        end
+    end
+    existing[name] = encoded
+    local ok, json = pcall(function() return HttpService:JSONEncode(existing) end)
+    if not ok then return false end
+    pcall(writefile, path, json)
+    return true
+end
+
+function Window:_themeAlpha(tokenKey, baseAlpha)
+    if not self.ThemeTransparency then return baseAlpha end
+    local t = self.ThemeTransparency[tokenKey]
+    if t == nil then return baseAlpha end
+    return baseAlpha * clamp(t, 0, 1)
+end
+
+function Window:_updateThemeEditorPosition()
+    if not self._themeEditor or not self._themeEditor.Open then return end
+    local editor = self._themeEditor
+    local vp = viewportSize()
+    local ew = editor.PanelWidth or 690
+    local eh = editor.PanelHeight or 320
+    local ex = self._position.X + self._size.X + 14
+    local ey = self._position.Y
+    ex = clamp(ex, 8, max(8, vp.X - ew - 8))
+    ey = clamp(ey, 8, max(8, vp.Y - eh - 8))
+    editor.Position = vector(ex, ey)
+end
 
 function Window:OpenThemeEditor()
     if self._themeEditor and self._themeEditor.Open then
         return self
     end
+    local colWidth = 180
+    local rowHeight = 28
+    local headerHeight = 38
+    local sectionHeaderHeight = 22
+    local maxRows = 0
+    for _, col in ipairs(ThemeEditorColumns) do
+        maxRows = max(maxRows, #col.Tokens)
+    end
+    local contentHeight = sectionHeaderHeight + maxRows * rowHeight
+    local panelWidth = #ThemeEditorColumns * colWidth + (#ThemeEditorColumns - 1) * 8 + 24
+    local panelHeight = headerHeight + contentHeight + 16
     self._themeEditor = {
         Open = true,
-        Position = vector(
-            self._position.X + self._size.X + 14,
-            self._position.Y
-        ),
-        Scroll = 0,
+        Position = vector(self._position.X + self._size.X + 14, self._position.Y),
+        PanelWidth = panelWidth,
+        PanelHeight = panelHeight,
         TokenProxies = {},
-        TokenRegions = {},
         SliderRegions = {},
+        HexRegions = {},
+        ActiveHexEdit = nil,
     }
     local editor = self._themeEditor
-    local viewport = viewportSize()
+    local vp = viewportSize()
     editor.Position = vector(
-        clamp(editor.Position.X, 8, max(8, viewport.X - 296)),
-        clamp(editor.Position.Y, 8, max(8, viewport.Y - 50))
+        clamp(editor.Position.X, 8, max(8, vp.X - panelWidth - 8)),
+        clamp(editor.Position.Y, 8, max(8, vp.Y - panelHeight - 8))
     )
-    for _, token in ipairs(ThemeEditorTokens) do
-        local proxy = {
-            Type = "ThemeProxy",
-            Name = token.Label,
-            Value = self.Theme[token.Key] or Color3.new(1, 1, 1),
-            Alpha = 1,
-            AllowAlpha = false,
-            _window = self,
-            _themeKey = token.Key,
-            _namedDrawings = {},
-            _destroyed = false,
-        }
-        function proxy:Set(color, alphaOrSilent, silent)
-            if typeof(color) == "Color3" then
-                self.Value = color
-                self._window.Theme[self._themeKey] = color
-                self._window._themePatch[self._themeKey] = color
+    for _, col in ipairs(ThemeEditorColumns) do
+        for _, token in ipairs(col.Tokens) do
+            local proxy = {
+                Type = "ThemeProxy",
+                Name = token.Label,
+                Value = self.Theme[token.Key] or Color3.new(1, 1, 1),
+                Alpha = 1,
+                AllowAlpha = false,
+                _window = self,
+                _themeKey = token.Key,
+                _namedDrawings = {},
+                _destroyed = false,
+            }
+            function proxy:Set(color, alphaOrSilent, silent)
+                if typeof(color) == "Color3" then
+                    self.Value = color
+                    self._window.Theme[self._themeKey] = color
+                    self._window._themePatch[self._themeKey] = color
+                end
+                return self
             end
-            return self
+            proxy.SetValue = proxy.Set
+            editor.TokenProxies[token.Key] = proxy
         end
-        proxy.SetValue = proxy.Set
-        editor.TokenProxies[token.Key] = proxy
     end
     editor.DragRegion = {
         Z = 0,
@@ -4776,12 +4967,33 @@ function Window:OpenThemeEditor()
             end
         end,
     }
-    editor.WheelRegion = {
+    editor.SaveRegion = {
         Z = 0,
-        OnWheel = function(direction)
-            editor.Scroll = max(0, editor.Scroll - direction * 28)
+        OnBegan = function(input)
+            if isPrimaryPointer(input) then
+                self:_focusText({
+                    Kind = "ThemeSave",
+                    Buffer = "",
+                    MaxLength = 32,
+                    Commit = function(buffer)
+                        if buffer and #buffer > 0 then
+                            local themeData = {}
+                            for _, col in ipairs(ThemeEditorColumns) do
+                                for _, token in ipairs(col.Tokens) do
+                                    themeData[token.Key] = self.Theme[token.Key]
+                                    if self.ThemeTransparency and self.ThemeTransparency[token.Key] then
+                                        themeData["__transparency_" .. token.Key] = self.ThemeTransparency[token.Key]
+                                    end
+                                end
+                            end
+                            Library:SaveThemeToFile(buffer, themeData)
+                            Library.SavedThemes[buffer] = themeData
+                            self:Notify({ Type = "Success", Title = "Theme saved", Description = "'" .. buffer .. "' was saved. Select it from the theme dropdown." })
+                        end
+                    end,
+                })
+            end
         end,
-        OnBegan = function() end,
     }
     return self
 end
@@ -4801,16 +5013,17 @@ function Window:_renderThemeEditor(deltaTime, baseZ, alpha)
     local factor = animationFactor(self.Settings, deltaTime)
     editor.Progress = animateNumber(editor.Progress or 0, 1, factor)
     local edAlpha = alpha * editor.Progress
-    local rowHeight = 34
     local headerHeight = 38
-    local panelWidth = 280
-    local visibleRows = min(#ThemeEditorTokens, max(6, floor((self._size.Y - 80) / rowHeight)))
-    local panelHeight = headerHeight + visibleRows * rowHeight + 12
+    local colWidth = 180
+    local rowHeight = 28
+    local sectionHeaderHeight = 22
+    local panelWidth = editor.PanelWidth or 690
+    local panelHeight = editor.PanelHeight or 320
     local x = editor.Position.X
     local y = editor.Position.Y
-    local viewport = viewportSize()
-    x = clamp(x, 8, max(8, viewport.X - panelWidth - 8))
-    y = clamp(y, 8, max(8, viewport.Y - panelHeight - 8))
+    local vp = viewportSize()
+    x = clamp(x, 8, max(8, vp.X - panelWidth - 8))
+    y = clamp(y, 8, max(8, vp.Y - panelHeight - 8))
     editor.Position = vector(x, y)
     local panelRect = rect(x, y, panelWidth, panelHeight)
     editor.PanelRect = panelRect
@@ -4827,7 +5040,12 @@ function Window:_renderThemeEditor(deltaTime, baseZ, alpha)
     local headerBg = namedDrawing(self, "themeEditor:header", "Square", { Filled = true })
     showSquare(headerBg, headerRect, self.Theme.Header, edAlpha, baseZ + 2)
     local title = namedDrawing(self, "themeEditor:title", "Text")
-    showText(title, "Theme Editor", vector(x + 12, y + 10), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, edAlpha, baseZ + 4)
+    showText(title, "Theme Editor", vector(x + 12, y + 10), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, edAlpha, baseZ + 4, false, true)
+    local saveText = namedDrawing(self, "themeEditor:saveLabel", "Text")
+    showText(saveText, "Save", vector(x + panelWidth - 90, y + 11), self.Theme.Accent, self.Settings.SmallFontSize, self.Settings.Font, edAlpha, baseZ + 4, false, true)
+    editor.SaveRegion.Rect = rect(x + panelWidth - 105, y + 3, 60, 28)
+    editor.SaveRegion.Z = baseZ + 20
+    registerRegion(self, editor.SaveRegion)
     local closeText = namedDrawing(self, "themeEditor:close", "Text")
     showText(closeText, "x", vector(x + panelWidth - 17, y + 9), self.Theme.TextSecondary, self.Settings.FontSize, self.Settings.Font, edAlpha, baseZ + 4, true)
     editor.CloseRegion.Rect = rect(x + panelWidth - 32, y + 3, 29, 28)
@@ -4836,63 +5054,21 @@ function Window:_renderThemeEditor(deltaTime, baseZ, alpha)
     editor.DragRegion.Rect = headerRect
     editor.DragRegion.Z = baseZ + 15
     registerRegion(self, editor.DragRegion)
-    editor.WheelRegion.Rect = panelRect
-    editor.WheelRegion.Z = baseZ + 5
-    registerRegion(self, editor.WheelRegion)
-    local clipRect = rect(x, y + headerHeight, panelWidth, visibleRows * rowHeight + 12)
-    local maxScroll = max(0, #ThemeEditorTokens - visibleRows)
-    editor.Scroll = clamp(floor(editor.Scroll + 0.5), 0, maxScroll)
-    local contentY = y + headerHeight + 6 - editor.Scroll * rowHeight
-    for visualIndex = 1, visibleRows do
-        local tokenIndex = editor.Scroll + visualIndex
-        local tokenDef = ThemeEditorTokens[tokenIndex]
-        if not tokenDef then break end
-        local rowY = contentY + (visualIndex - 1) * rowHeight
-        local rowRect = rect(x + 6, rowY, panelWidth - 12, rowHeight - 3)
-        if intersects(rowRect, clipRect) then
-            local proxy = editor.TokenProxies[tokenDef.Key]
-            local label = namedDrawing(self, "themeEditor:label:" .. tokenIndex, "Text")
-            showText(label, trimText(tokenDef.Label, 120, self.Settings.SmallFontSize), vector(x + 14, rowY + 9), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, edAlpha, baseZ + 4)
-            local swatchRect = rect(x + 140, rowY + 6, 24, 18)
-            local swatch = namedDrawing(self, "themeEditor:swatch:" .. tokenIndex, "Square", { Filled = true })
+    local contentY = y + headerHeight + 8
+    for colIdx, col in ipairs(ThemeEditorColumns) do
+        local colX = x + 12 + (colIdx - 1) * (colWidth + 8)
+        local sectionLabel = namedDrawing(self, "themeEditor:section:" .. colIdx, "Text")
+        showText(sectionLabel, col.Title, vector(colX, contentY), self.Theme.Accent, self.Settings.SmallFontSize, self.Settings.Font, edAlpha, baseZ + 4, false, true)
+        for rowIdx, token in ipairs(col.Tokens) do
+            local rowY = contentY + sectionHeaderHeight + (rowIdx - 1) * rowHeight
+            local proxy = editor.TokenProxies[token.Key]
+            local label = namedDrawing(self, "themeEditor:label:" .. colIdx .. ":" .. rowIdx, "Text")
+            showText(label, trimText(token.Label, 60, self.Settings.SmallFontSize), vector(colX, rowY + 6), self.Theme.Text, self.Settings.SmallFontSize, self.Settings.Font, edAlpha, baseZ + 4, false, true)
+            local swatchRect = rect(colX + 64, rowY + 4, 16, 16)
+            local swatch = namedDrawing(self, "themeEditor:swatch:" .. colIdx .. ":" .. rowIdx, "Square", { Filled = true })
             showSquare(swatch, swatchRect, proxy.Value, edAlpha, baseZ + 4)
-            local swatchBorder = namedDrawing(self, "themeEditor:swatchBorder:" .. tokenIndex, "Square", { Filled = false })
+            local swatchBorder = namedDrawing(self, "themeEditor:swatchBorder:" .. colIdx .. ":" .. rowIdx, "Square", { Filled = false })
             showSquare(swatchBorder, swatchRect, self.Theme.Border, edAlpha, baseZ + 5, false, 1)
-            local hexText = namedDrawing(self, "themeEditor:hex:" .. tokenIndex, "Text")
-            showText(hexText, colorToHex(proxy.Value), vector(x + 170, rowY + 9), self.Theme.TextDisabled, self.Settings.SmallFontSize - 1, self.Settings.MonoFont, edAlpha, baseZ + 4)
-            local sliderBgRect = rect(x + 230, rowY + 12, 36, 4)
-            local sliderBg = namedDrawing(self, "themeEditor:sliderBg:" .. tokenIndex, "Square", { Filled = true })
-            showSquare(sliderBg, sliderBgRect, self.Theme.SliderTrack, edAlpha, baseZ + 4)
-            editor.SliderRegions[tokenDef.Key] = sliderBgRect
-            local currentTransparency = self.ThemeTransparency and self.ThemeTransparency[tokenDef.Key] or 1
-            local sliderFillWidth = 36 * currentTransparency
-            local sliderFill = namedDrawing(self, "themeEditor:sliderFill:" .. tokenIndex, "Square", { Filled = true })
-            showSquare(sliderFill, rect(sliderBgRect.X, sliderBgRect.Y, sliderFillWidth, sliderBgRect.H), self.Theme.Accent, edAlpha, baseZ + 5)
-            local thumbX = sliderBgRect.X + sliderFillWidth
-            local thumb = namedDrawing(self, "themeEditor:thumb:" .. tokenIndex, "Circle", { Filled = true, NumSides = 16 })
-            setDrawing(thumb, {
-                Position = vector(thumbX, sliderBgRect.Y + sliderBgRect.H / 2),
-                Radius = 4, NumSides = 16, Filled = true, Color = self.Theme.Text,
-                Transparency = edAlpha, ZIndex = baseZ + 6, Visible = true,
-            })
-            local sliderRegion = {
-                Z = baseZ + 12,
-                OnBegan = function(input, position)
-                    if isPrimaryPointer(input) then
-                        local function updateFromPosition(pos)
-                            local ratio = clamp((pos.X - sliderBgRect.X) / sliderBgRect.W, 0, 1)
-                            if not self.ThemeTransparency then self.ThemeTransparency = {} end
-                            self.ThemeTransparency[tokenDef.Key] = ratio
-                        end
-                        updateFromPosition(position)
-                        Library:_capturePointer(self, function(current)
-                            updateFromPosition(current)
-                        end)
-                    end
-                end,
-            }
-            sliderRegion.Rect = sliderBgRect
-            registerRegion(self, sliderRegion)
             local swatchRegion = {
                 Z = baseZ + 12,
                 OnBegan = function(input)
@@ -4903,6 +5079,90 @@ function Window:_renderThemeEditor(deltaTime, baseZ, alpha)
             }
             swatchRegion.Rect = swatchRect
             registerRegion(self, swatchRegion)
+            local hex = colorToHex(proxy.Value)
+            local hexKey = colIdx .. ":" .. rowIdx
+            local isEditing = editor.ActiveHexEdit == hexKey
+            local hexRect = rect(colX + 84, rowY + 3, 36, 18)
+            if isEditing then
+                local focusBuf = self._focus and self._focus.Buffer or hex
+                local hexBg = namedDrawing(self, "themeEditor:hexBg:" .. hexKey, "Square", { Filled = true })
+                showSquare(hexBg, hexRect, self.Theme.Input, edAlpha, baseZ + 4)
+                local hexInputBorder = namedDrawing(self, "themeEditor:hexBorder:" .. hexKey, "Square", { Filled = false })
+                showSquare(hexInputBorder, hexRect, self.Theme.Accent, edAlpha, baseZ + 5, false, 1)
+                local hexDrawing = namedDrawing(self, "themeEditor:hexText:" .. hexKey, "Text")
+                showText(hexDrawing, focusBuf, vector(hexRect.X + 3, rowY + 6), self.Theme.Text, self.Settings.SmallFontSize - 1, self.Settings.MonoFont, edAlpha, baseZ + 6, false)
+            else
+                local hexDrawing = namedDrawing(self, "themeEditor:hexText:" .. hexKey, "Text")
+                showText(hexDrawing, hex, vector(hexRect.X + 3, rowY + 6), self.Theme.TextSecondary, self.Settings.SmallFontSize - 1, self.Settings.MonoFont, edAlpha, baseZ + 4, false)
+                local hexHovered = pointIn(Library._mouse, hexRect)
+                if hexHovered then
+                    local hexHoverBg = namedDrawing(self, "themeEditor:hexHover:" .. hexKey, "Square", { Filled = true })
+                    showSquare(hexHoverBg, hexRect, self.Theme.CardHover, edAlpha * 0.5, baseZ + 3)
+                end
+                local hexRegion = {
+                    Z = baseZ + 12,
+                    OnBegan = function(input)
+                        if isPrimaryPointer(input) then
+                            editor.ActiveHexEdit = hexKey
+                            self:_focusText({
+                                Kind = "ThemeHex",
+                                ThemeToken = token.Key,
+                                Proxy = proxy,
+                                Buffer = colorToHex(proxy.Value),
+                                MaxLength = 7,
+                                Commit = function(buffer)
+                                    local parsed = colorFromHex(buffer)
+                                    if parsed then
+                                        proxy:Set(parsed)
+                                    end
+                                    editor.ActiveHexEdit = nil
+                                end,
+                                Cancel = function()
+                                    editor.ActiveHexEdit = nil
+                                end,
+                            })
+                        end
+                    end,
+                }
+                hexRegion.Rect = hexRect
+                registerRegion(self, hexRegion)
+            end
+            local sliderLabel = namedDrawing(self, "themeEditor:opacityLabel:" .. colIdx .. ":" .. rowIdx, "Text")
+            showText(sliderLabel, "A", vector(colX + 124, rowY + 6), self.Theme.TextDisabled, self.Settings.SmallFontSize - 2, self.Settings.MonoFont, edAlpha, baseZ + 4, false)
+            local sliderBgRect = rect(colX + 134, rowY + 10, 32, 4)
+            local sliderBg = namedDrawing(self, "themeEditor:sliderBg:" .. colIdx .. ":" .. rowIdx, "Square", { Filled = true })
+            showSquare(sliderBg, sliderBgRect, self.Theme.SliderTrack, edAlpha, baseZ + 4)
+            local currentTransparency = self.ThemeTransparency and self.ThemeTransparency[token.Key] or 1
+            local sliderFillWidth = 32 * currentTransparency
+            local sliderFill = namedDrawing(self, "themeEditor:sliderFill:" .. colIdx .. ":" .. rowIdx, "Square", { Filled = true })
+            showSquare(sliderFill, rect(sliderBgRect.X, sliderBgRect.Y, sliderFillWidth, sliderBgRect.H), self.Theme.Accent, edAlpha, baseZ + 5)
+            local thumbX = sliderBgRect.X + sliderFillWidth
+            local thumb = namedDrawing(self, "themeEditor:thumb:" .. colIdx .. ":" .. rowIdx, "Circle", { Filled = true, NumSides = 16 })
+            setDrawing(thumb, {
+                Position = vector(thumbX, sliderBgRect.Y + sliderBgRect.H / 2),
+                Radius = 4, NumSides = 16, Filled = true, Color = self.Theme.Text,
+                Transparency = edAlpha, ZIndex = baseZ + 6, Visible = true,
+            })
+            local pctText = namedDrawing(self, "themeEditor:pct:" .. colIdx .. ":" .. rowIdx, "Text")
+            showText(pctText, tostring(floor(currentTransparency * 100 + 0.5)) .. "%", vector(sliderBgRect.X + sliderBgRect.W + 3, rowY + 5), self.Theme.TextDisabled, self.Settings.SmallFontSize - 2, self.Settings.MonoFont, edAlpha, baseZ + 4, false)
+            local sliderRegion = {
+                Z = baseZ + 12,
+                OnBegan = function(input, position)
+                    if isPrimaryPointer(input) then
+                        local function updateFromPosition(pos)
+                            local ratio = clamp((pos.X - sliderBgRect.X) / sliderBgRect.W, 0, 1)
+                            if not self.ThemeTransparency then self.ThemeTransparency = {} end
+                            self.ThemeTransparency[token.Key] = ratio
+                        end
+                        updateFromPosition(position)
+                        Library:_capturePointer(self, function(current)
+                            updateFromPosition(current)
+                        end)
+                    end
+                end,
+            }
+            sliderRegion.Rect = sliderBgRect
+            registerRegion(self, sliderRegion)
         end
     end
 end
@@ -5112,5 +5372,7 @@ end
 Library.Destroy = Library.Unload
 Library.CheckCapabilities = Library.GetCapabilities
 Library.Create = Library.CreateWindow
+
+pcall(function() Library:LoadSavedThemes() end)
 
 return Library
