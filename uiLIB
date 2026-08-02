@@ -498,10 +498,11 @@ function RoundRect.new(owner, prefix)
         Prefix = prefix,
         Parts = {},
     }, RoundRect)
-    self.Parts.Center = newDrawing(owner, "Square", { Filled = true })
-    self.Parts.Middle = newDrawing(owner, "Square", { Filled = true })
+    local window = owner._window or owner
+    self.Parts.Center = newDrawing(window, "Square", { Filled = true })
+    self.Parts.Middle = newDrawing(window, "Square", { Filled = true })
     for index = 1, 4 do
-        self.Parts[index] = newDrawing(owner, "Circle", {
+        self.Parts[index] = newDrawing(window, "Circle", {
             Filled = true,
             NumSides = 20,
         })
