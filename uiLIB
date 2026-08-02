@@ -396,10 +396,10 @@ Library.DefaultSettings = {
     Easing = "Exponential",
     Font = (DrawingAPI and DrawingAPI.Fonts and (DrawingAPI.Fonts.Plex or DrawingAPI.Fonts.UI)) or 2,
     MonoFont = (DrawingAPI and DrawingAPI.Fonts and (DrawingAPI.Fonts.Monospace or DrawingAPI.Fonts.Plex)) or 2,
-    FontSize = 13,
-    SmallFontSize = 11,
-    TitleFontSize = 17,
-    Radius = 7,
+    FontSize = 14,
+    SmallFontSize = 12,
+    TitleFontSize = 18,
+    Radius = 10,
     BorderThickness = 1,
     Opacity = 0.98,
     Padding = 14,
@@ -603,7 +603,7 @@ local function showText(drawing, text, position, color, size, font, alpha, zInde
         Transparency = clamp(alpha, 0, 1),
         ZIndex = zIndex,
         Center = centered == true,
-        Outline = outline == true,
+        Outline = true,
         OutlineColor = Color3.fromRGB(0, 0, 0),
         Visible = alpha > 0.001,
     })
@@ -1057,7 +1057,6 @@ function Library:CreateWindow(options)
                     clamp(candidate.X, 580, max(580, viewportNow.X - self._targetPosition.X)),
                     clamp(candidate.Y, 420, max(420, viewportNow.Y - self._targetPosition.Y))
                 )
-                self:_updateThemeEditorPosition()
             end)
         end,
     }
@@ -1571,6 +1570,7 @@ function Tab:AddSection(options)
     local section = setmetatable({
         Name = tostring(options.Name or options.Title or "Section"),
         Description = options.Description and tostring(options.Description) or nil,
+        Tooltip = options.Tooltip and tostring(options.Tooltip) or (options.Description and tostring(options.Description) or nil),
         Icon = options.Icon,
         Side = tostring(options.Side or options.Column or "Auto"),
         FullWidth = options.FullWidth == true or options.Span == 2,
@@ -1709,7 +1709,7 @@ function Section:_render(context, sectionRect)
     showSquare(background, clipped, context.Theme.BackgroundSecondary, context.Alpha, context.Z)
     showSquare(border, clipped, context.Theme.BorderSoft, context.Alpha, context.Z + 1, false, context.Settings.BorderThickness)
 
-    local headerHeight = self.Description and 54 or 42
+    local headerHeight = 42
     local headerRect = rect(sectionRect.X, sectionRect.Y, sectionRect.W, headerHeight)
     self._headerRect = headerRect
     if fullyInsideVertical(headerRect, clip) then
@@ -1721,11 +1721,7 @@ function Section:_render(context, sectionRect)
             textX = textX + 25
         end
         local title = namedDrawing(self, "section:title", "Text")
-        showText(title, trimText(self.Name, headerRect.W - (textX - headerRect.X) - 46, context.Settings.FontSize + 1), vector(textX, headerRect.Y + (self.Description and 9 or 13)), context.Theme.Text, context.Settings.FontSize + 1, context.Settings.Font, context.Alpha, context.Z + 5)
-        if self.Description then
-            local description = namedDrawing(self, "section:description", "Text")
-            showText(description, trimText(self.Description, headerRect.W - (textX - headerRect.X) - 20, context.Settings.SmallFontSize), vector(textX, headerRect.Y + 29), context.Theme.TextSecondary, context.Settings.SmallFontSize, context.Settings.Font, context.Alpha, context.Z + 5)
-        end
+        showText(title, trimText(self.Name, headerRect.W - (textX - headerRect.X) - 46, context.Settings.FontSize + 1), vector(textX, headerRect.Y + 13), context.Theme.Text, context.Settings.FontSize + 1, context.Settings.Font, context.Alpha, context.Z + 5)
         if self.Collapsible then
             local arrow = namedDrawing(self, "section:arrow", "Text")
             showText(arrow, self.Collapsed and ">" or "v", vector(headerRect.X + headerRect.W - 20, headerRect.Y + 13), context.Theme.TextSecondary, context.Settings.FontSize, context.Settings.Font, context.Alpha, context.Z + 6, true)
@@ -1757,7 +1753,7 @@ local function makeElement(section, kind, options, defaultValue, height)
         Type = kind,
         Name = tostring(options.Name or options.Title or kind),
         Description = options.Description and tostring(options.Description) or nil,
-        Tooltip = options.Tooltip and tostring(options.Tooltip) or nil,
+        Tooltip = options.Tooltip and tostring(options.Tooltip) or (options.Description and tostring(options.Description) or nil),
         Icon = options.Icon,
         Flag = options.Flag or (persistent and (string.lower(kind) .. "_" .. serial) or nil),
         Value = options.Default ~= nil and copy(options.Default) or copy(defaultValue),
@@ -1890,11 +1886,25 @@ function Element:_card(context, targetRect, selected)
     local hovered = not self.Disabled and pointIn(Library._mouse, targetRect)
     local desired = selected and 1 or (hovered and 0.55 or 0)
     self._hover = animateNumber(self._hover, desired, context.Factor)
-    local card = self:_drawing("element:card", "Square", { Filled = true })
     local baseColor = selected and context.Theme.CardActive or context.Theme.Card
-    showSquare(card, targetRect, colorLerp(baseColor, context.Theme.CardHover, self._hover * 0.6), context.Alpha * (self.Disabled and 0.45 or 1), context.Z + 5)
+    local cardColor = colorLerp(baseColor, context.Theme.CardHover, self._hover * 0.6)
+    local cardAlpha = context.Alpha * (self.Disabled and 0.45 or 1)
+    local radius = context.Settings.Radius
+    if radius >= 2 and self.Type ~= "Checkbox" then
+        if not self._cardRound then
+            self._cardRound = RoundRect.new(self, "element:cardRound")
+        end
+        self._cardRound:Set(
+            vector(targetRect.X, targetRect.Y),
+            vector(targetRect.W, targetRect.H),
+            min(radius, 6), cardColor, cardAlpha, context.Z + 5, true
+        )
+    else
+        local card = self:_drawing("element:card", "Square", { Filled = true })
+        showSquare(card, targetRect, cardColor, cardAlpha, context.Z + 5)
+    end
     local border = self:_drawing("element:border", "Square", { Filled = false })
-    showSquare(border, targetRect, selected and context.Theme.AccentMuted or context.Theme.BorderSoft, context.Alpha * (self.Disabled and 0.45 or 1), context.Z + 6, false, context.Settings.BorderThickness)
+    showSquare(border, targetRect, selected and context.Theme.AccentMuted or context.Theme.BorderSoft, cardAlpha, context.Z + 6, false, context.Settings.BorderThickness)
     self:_tooltip(hovered)
     return hovered
 end
@@ -1906,12 +1916,8 @@ function Element:_label(context, targetRect, rightPadding)
         x = x + 25
     end
     local label = self:_drawing("element:label", "Text")
-    local labelY = targetRect.Y + (self.Description and 9 or floor((targetRect.H - context.Settings.FontSize) / 2) - 1)
+    local labelY = targetRect.Y + floor((targetRect.H - context.Settings.FontSize) / 2) - 1
     showText(label, trimText(self.Name, targetRect.W - (x - targetRect.X) - (rightPadding or 18), context.Settings.FontSize), vector(x, labelY), self.Disabled and context.Theme.TextDisabled or context.Theme.Text, context.Settings.FontSize, context.Settings.Font, context.Alpha * (self.Disabled and 0.55 or 1), context.Z + 12)
-    if self.Description then
-        local description = self:_drawing("element:description", "Text")
-        showText(description, trimText(self.Description, targetRect.W - (x - targetRect.X) - (rightPadding or 18), context.Settings.SmallFontSize), vector(x, targetRect.Y + 28), self.Disabled and context.Theme.TextDisabled or context.Theme.TextSecondary, context.Settings.SmallFontSize, context.Settings.Font, context.Alpha * (self.Disabled and 0.55 or 1), context.Z + 12)
-    end
 end
 
 function Element:_registerMain(context, targetRect)
@@ -1937,7 +1943,7 @@ end
 
 function Section:AddToggle(options)
     options = options or {}
-    local element = makeElement(self, "Toggle", options, false, options.Description and 54 or 46)
+    local element = makeElement(self, "Toggle", options, false, 46)
     element.Value = element.Value == true
     element.Key = options.Key or options.Keybind
     element.ShowInList = options.ShowInList ~= false
@@ -2095,8 +2101,15 @@ function Section:AddToggle(options)
             right = self._keyRect.X - 8
         end
         local trackRect = rect(right - 40, targetRect.Y + floor((targetRect.H - 22) / 2), 40, 22)
-        local track = self:_drawing("toggle:track", "Square", { Filled = true })
-        showSquare(track, trackRect, self.Value and context.Theme.Accent or context.Theme.ToggleOff, context.Alpha, context.Z + 15)
+        if not self._trackRound then
+            self._trackRound = RoundRect.new(self, "toggle:trackRound")
+        end
+        self._trackRound:Set(
+            vector(trackRect.X, trackRect.Y),
+            vector(trackRect.W, trackRect.H),
+            11, self.Value and context.Theme.Accent or context.Theme.ToggleOff,
+            context.Alpha, context.Z + 15, true
+        )
         self._active = animateNumber(self._active, self.Value and 1 or 0, context.Factor)
         local knob = self:_drawing("toggle:knob", "Circle", { Filled = true, NumSides = 20 })
         setDrawing(knob, {
@@ -2121,7 +2134,7 @@ Section.Toggle = Section.AddToggle
 
 function Section:AddCheckbox(options)
     options = options or {}
-    local element = makeElement(self, "Checkbox", options, false, options.Description and 52 or 42)
+    local element = makeElement(self, "Checkbox", options, false, 42)
     element.Value = element.Value == true
     function element:_coerce(value)
         return value == true
@@ -2236,7 +2249,7 @@ function Section:AddSlider(options)
     local minimum = tonumber(options.Min or options.Minimum) or 0
     local maximum = tonumber(options.Max or options.Maximum) or 100
     if maximum < minimum then minimum, maximum = maximum, minimum end
-    local element = makeElement(self, "Slider", options, minimum, options.Description and 68 or 60)
+    local element = makeElement(self, "Slider", options, minimum, 60)
     element.Min = minimum
     element.Max = maximum
     element.Step = tonumber(options.Step or options.Increment) or 1
@@ -2288,10 +2301,12 @@ function Section:AddSlider(options)
         local fill = self:_drawing("slider:fill", "Square", { Filled = true })
         showSquare(track, self._barRect, context.Theme.SliderTrack, context.Alpha, context.Z + 14)
         showSquare(fill, rect(self._barRect.X, self._barRect.Y, self._barRect.W * ratio, self._barRect.H), context.Theme.Accent, context.Alpha, context.Z + 15)
+        local thumbHovered = pointIn(Library._mouse, rect(self._barRect.X + self._barRect.W * ratio - 7, self._barRect.Y - 4, 14, 14))
+        local thumbRadius = thumbHovered and 7 or 5
         local thumb = self:_drawing("slider:thumb", "Circle", { Filled = true, NumSides = 18 })
         setDrawing(thumb, {
             Position = vector(self._barRect.X + self._barRect.W * ratio, self._barRect.Y + self._barRect.H / 2),
-            Radius = 5, NumSides = 18, Filled = true, Color = context.Theme.Text,
+            Radius = thumbRadius, NumSides = 18, Filled = true, Color = thumbHovered and context.Theme.Accent or context.Theme.Text,
             Transparency = context.Alpha, ZIndex = context.Z + 17, Visible = true,
         })
         self:_registerMain(context, targetRect)
@@ -2306,7 +2321,7 @@ function Section:AddProgressBar(options)
     options = options or {}
     local minimum = tonumber(options.Min) or 0
     local maximum = tonumber(options.Max) or 100
-    local element = makeElement(self, "ProgressBar", options, minimum, options.Description and 66 or 58)
+    local element = makeElement(self, "ProgressBar", options, minimum, 58)
     element.Min = minimum
     element.Max = max(minimum, maximum)
     element.Interactive = options.Interactive == true
@@ -2353,7 +2368,7 @@ function Section:AddButton(options)
     if type(options) == "string" then options = { Name = options } end
     options = options or {}
     options.IgnoreConfig = true
-    local element = makeElement(self, "Button", options, false, options.Description and 52 or 42)
+    local element = makeElement(self, "Button", options, false, 42)
     element.Loading = options.Loading == true
     function element:SetLoading(loading, text)
         self.Loading = loading == true
@@ -2374,10 +2389,13 @@ function Section:AddButton(options)
     end
     function element:_render(context, targetRect)
         if not fullyInsideVertical(targetRect, context.Clip) then return end
-        self:_card(context, targetRect, true)
+        local hovered = self:_card(context, targetRect, false)
+        local accentBg = self:_drawing("button:accentBg", "Square", { Filled = true })
+        local accentAlpha = self._hover * 0.12
+        showSquare(accentBg, targetRect, context.Theme.Accent, context.Alpha * accentAlpha, context.Z + 7)
         local text = self:_drawing("button:text", "Text")
         local caption = self.Loading and (self.LoadingText or "Processing...") or self.Name
-        showText(text, caption, vector(targetRect.X + targetRect.W / 2, targetRect.Y + floor((targetRect.H - context.Settings.FontSize) / 2) - 1), context.Theme.Text, context.Settings.FontSize, context.Settings.Font, context.Alpha, context.Z + 16, true)
+        showText(text, caption, vector(targetRect.X + targetRect.W / 2, targetRect.Y + floor((targetRect.H - context.Settings.FontSize) / 2) - 1), self.Loading and context.Theme.Accent or (hovered and context.Theme.Text or context.Theme.TextSecondary), context.Settings.FontSize, context.Settings.Font, context.Alpha, context.Z + 16, true)
         if self.Loading then
             local dot = self:_drawing("button:loading", "Circle", { Filled = true, NumSides = 14 })
             local pulse = (math.sin(os.clock() * 7) + 1) / 2
@@ -2396,7 +2414,7 @@ Section.Button = Section.AddButton
 
 function Section:AddToggleButton(options)
     options = options or {}
-    local element = makeElement(self, "ToggleButton", options, false, options.Description and 52 or 42)
+    local element = makeElement(self, "ToggleButton", options, false, 42)
     element.Value = element.Value == true
     function element:_coerce(value) return value == true end
     function element:_onClick() self:Set(not self.Value) end
@@ -2405,8 +2423,15 @@ function Section:AddToggleButton(options)
         self:_card(context, targetRect, self.Value)
         local right = targetRect.X + targetRect.W - 12
         local trackRect = rect(right - 40, targetRect.Y + floor((targetRect.H - 22) / 2), 40, 22)
-        local track = self:_drawing("toggleButton:track", "Square", { Filled = true })
-        showSquare(track, trackRect, self.Value and context.Theme.Accent or context.Theme.ToggleOff, context.Alpha, context.Z + 15)
+        if not self._trackRound then
+            self._trackRound = RoundRect.new(self, "toggleButton:trackRound")
+        end
+        self._trackRound:Set(
+            vector(trackRect.X, trackRect.Y),
+            vector(trackRect.W, trackRect.H),
+            11, self.Value and context.Theme.Accent or context.Theme.ToggleOff,
+            context.Alpha, context.Z + 15, true
+        )
         self._active = animateNumber(self._active or 0, self.Value and 1 or 0, context.Factor)
         local knob = self:_drawing("toggleButton:knob", "Circle", { Filled = true, NumSides = 20 })
         setDrawing(knob, {
@@ -2430,7 +2455,7 @@ function Section:AddLabel(options)
     if type(options) == "string" then options = { Name = options } end
     options = options or {}
     options.IgnoreConfig = true
-    local element = makeElement(self, "Label", options, nil, options.Description and 50 or 34)
+    local element = makeElement(self, "Label", options, nil, 34)
     function element:SetText(text, description)
         self.Name = tostring(text)
         if description ~= nil then self.Description = tostring(description) end
@@ -2452,7 +2477,7 @@ function Section:AddDropdown(options)
     local choices = normalizeOptions(options.Options or options.Values or {})
     local multi = options.Multi == true or options.Multiple == true
     local fallback = multi and {} or firstEnabledValue(choices)
-    local element = makeElement(self, multi and "MultiDropdown" or "Dropdown", options, fallback, options.Description and 56 or 48)
+    local element = makeElement(self, multi and "MultiDropdown" or "Dropdown", options, fallback, 48)
     element.Options = choices
     element.Multi = multi
     element.MaxVisible = max(1, floor(tonumber(options.MaxVisible) or 7))
@@ -2568,7 +2593,7 @@ function Section:AddTextBox(options)
     options = options or {}
     local numeric = options.Numeric == true or string.lower(tostring(options.Type or "")) == "number"
     local fallback = numeric and 0 or ""
-    local element = makeElement(self, "TextBox", options, fallback, options.Description and 56 or 48)
+    local element = makeElement(self, "TextBox", options, fallback, 48)
     element.Placeholder = tostring(options.Placeholder or (numeric and "Enter a number..." or "Enter text..."))
     element.Numeric = numeric
     element.MaxLength = tonumber(options.MaxLength) or 128
@@ -2647,7 +2672,7 @@ function Section:AddKeybind(options)
     options = options or {}
     local defaultKey = options.Default or options.Key or Enum.KeyCode.Unknown
     if type(defaultKey) == "string" then defaultKey = keyFromName(defaultKey) or Enum.KeyCode.Unknown end
-    local element = makeElement(self, "Keybind", options, defaultKey, options.Description and 54 or 46)
+    local element = makeElement(self, "Keybind", options, defaultKey, 46)
     element.Mode = tostring(options.Mode or "Toggle")
     element.Active = string.lower(element.Mode) == "always"
     element.ShowInList = options.ShowInList ~= false
@@ -2739,10 +2764,11 @@ function Section:AddKeybind(options)
         local modeText = string.lower(self.Mode) == "hold" and "Hold" or (string.lower(self.Mode) == "always" and "Always" or "Toggle")
         local modeWidth = estimateTextWidth(modeText, context.Settings.SmallFontSize) + 16
         self._modeRect = rect(targetRect.X + targetRect.W - modeWidth - 12, targetRect.Y + floor((targetRect.H - 26) / 2), modeWidth, 26)
+        local modeHovered = pointIn(Library._mouse, self._modeRect)
         local modeBackground = self:_drawing("keybind:modeBackground", "Square", { Filled = true })
-        showSquare(modeBackground, self._modeRect, context.Theme.CardHover, context.Alpha, context.Z + 14)
+        showSquare(modeBackground, self._modeRect, modeHovered and context.Theme.AccentMuted or context.Theme.CardHover, context.Alpha, context.Z + 14)
         local modeDrawing = self:_drawing("keybind:modeText", "Text")
-        showText(modeDrawing, modeText, vector(self._modeRect.X + self._modeRect.W / 2, self._modeRect.Y + 7), context.Theme.TextSecondary, context.Settings.SmallFontSize, context.Settings.Font, context.Alpha, context.Z + 17, true)
+        showText(modeDrawing, modeText, vector(self._modeRect.X + self._modeRect.W / 2, self._modeRect.Y + 7), modeHovered and context.Theme.Accent or context.Theme.TextSecondary, context.Settings.SmallFontSize, context.Settings.Font, context.Alpha, context.Z + 17, true)
         local keyRect = rect(self._modeRect.X - width - 6, targetRect.Y + floor((targetRect.H - 26) / 2), width, 26)
         local keyBackground = self:_drawing("keybind:background", "Square", { Filled = true })
         local keyBorder = self:_drawing("keybind:border", "Square", { Filled = false })
@@ -2762,7 +2788,7 @@ function Section:AddColorPicker(options)
     options = options or {}
     local defaultColor = options.Default or options.Color or self._window.Theme.Accent
     if type(defaultColor) == "string" then defaultColor = colorFromHex(defaultColor) or self._window.Theme.Accent end
-    local element = makeElement(self, "ColorPicker", options, defaultColor, options.Description and 54 or 46)
+    local element = makeElement(self, "ColorPicker", options, defaultColor, 46)
     element.Value = typeof(element.Value) == "Color3" and element.Value or self._window.Theme.Accent
     element.Alpha = clamp(tonumber(options.Alpha) or 1, 0, 1)
     element.AllowAlpha = options.AllowAlpha ~= false
@@ -3017,8 +3043,12 @@ function Window:_renderDropdownOverlay(overlay, zIndex, alpha)
         local hovered = pointIn(Library._mouse, itemRect)
         local background = namedDrawing(self, "overlay:dropdown:itemBg:" .. visualIndex, "Square", { Filled = true })
         showSquare(background, itemRect, selected and self.Theme.Selection or (hovered and self.Theme.CardHover or self.Theme.Popup), alpha * (option.Disabled and 0.5 or 1), zIndex + 5)
+        if selected or hovered then
+            local accentBar = namedDrawing(self, "overlay:dropdown:accent:" .. visualIndex, "Square", { Filled = true })
+            showSquare(accentBar, rect(itemRect.X, itemRect.Y, 2, itemRect.H), selected and self.Theme.Accent or self.Theme.BorderSoft, alpha, zIndex + 6)
+        end
         local textDrawing = namedDrawing(self, "overlay:dropdown:itemText:" .. visualIndex, "Text")
-        showText(textDrawing, trimText(option.Label, itemRect.W - 34, self.Settings.FontSize), vector(itemRect.X + 9, itemRect.Y + 6), option.Disabled and self.Theme.TextDisabled or (selected and self.Theme.Text or self.Theme.TextSecondary), self.Settings.FontSize, self.Settings.Font, alpha, zIndex + 8)
+        showText(textDrawing, trimText(option.Label, itemRect.W - 34, self.Settings.FontSize), vector(itemRect.X + 9, itemRect.Y + 6), option.Disabled and self.Theme.TextDisabled or (selected and self.Theme.Text or (hovered and self.Theme.Text or self.Theme.TextSecondary)), self.Settings.FontSize, self.Settings.Font, alpha, zIndex + 8)
         if selected then
             local check = namedDrawing(self, "overlay:dropdown:itemCheck:" .. visualIndex, "Text")
             showText(check, "x", vector(itemRect.X + itemRect.W - 15, itemRect.Y + 6), self.Theme.Accent, self.Settings.FontSize, self.Settings.Font, alpha, zIndex + 9, true)
@@ -3483,20 +3513,26 @@ function Window:_renderNotifications(deltaTime, zIndex, alpha)
             end
             local cardRect = rect(x, y, width, height)
             notification._lastRect = cardRect
-            local card = namedDrawing(notification, "notification:card", "Square", { Filled = true })
-            local border = namedDrawing(notification, "notification:border", "Square", { Filled = false })
-            showSquare(card, cardRect, self.Theme.Popup, alpha * notification.Progress, zIndex + index * 4)
+            local notifPrefix = "notification:" .. index .. ":"
+            if not notification._round then
+                notification._round = RoundRect.new(self, notifPrefix)
+            end
+            notification._round:Set(vector(x, y), vector(width, height), self.Settings.Radius, self.Theme.Popup, alpha * notification.Progress, zIndex + index * 4, true)
+            local border = namedDrawing(notification, notifPrefix .. "border", "Square", { Filled = false })
             showSquare(border, cardRect, self.Theme.Border, alpha * notification.Progress, zIndex + index * 4 + 1, false, 1)
             local token = notificationColors[notification.Type] or "Info"
             local accentColor = self.Theme[token] or self.Theme.Info
-            local accent = namedDrawing(notification, "notification:accent", "Square", { Filled = true })
+            local accent = namedDrawing(notification, notifPrefix .. "accent", "Square", { Filled = true })
             showSquare(accent, rect(x, y, 3, height), accentColor, alpha, zIndex + index * 4 + 2)
-            local title = namedDrawing(notification, "notification:title", "Text")
-            showText(title, trimText(notification.Title, width - 44, self.Settings.FontSize), vector(x + 13, y + 10), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, alpha, zIndex + index * 4 + 3)
+            local iconMap = { Info = "info", Success = "check", Warning = "alert_triangle", Error = "x" }
+            local notifIcon = iconMap[notification.Type] or "info"
+            renderIcon(notification, notifPrefix .. "icon", notifIcon, vector(x + 12, y + 10), 15, accentColor, alpha, zIndex + index * 4 + 3)
+            local title = namedDrawing(notification, notifPrefix .. "title", "Text")
+            showText(title, trimText(notification.Title, width - 58, self.Settings.FontSize), vector(x + 30, y + 10), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, alpha, zIndex + index * 4 + 3)
             for lineIndex, line in ipairs(lines) do
                 if notification.Description ~= "" then
-                    local lineDrawing = namedDrawing(notification, "notification:line:" .. lineIndex, "Text")
-                    showText(lineDrawing, line, vector(x + 13, y + 31 + (lineIndex - 1) * 15), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + index * 4 + 3)
+                    local lineDrawing = namedDrawing(notification, notifPrefix .. "line:" .. lineIndex, "Text")
+                    showText(lineDrawing, line, vector(x + 30, y + 31 + (lineIndex - 1) * 15), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + index * 4 + 3)
                 end
             end
             local progress = clamp(1 - elapsed / notification.Duration, 0, 1)
@@ -3521,18 +3557,22 @@ function Window:_renderTooltip(zIndex, alpha)
     local lines = wrappedLines(text, 46, 3)
     local width = 0
     for _, line in ipairs(lines) do width = max(width, estimateTextWidth(line, self.Settings.SmallFontSize)) end
-    width = clamp(width + 20, 90, 310)
-    local height = 14 + #lines * 15
+    width = clamp(width + 24, 90, 320)
+    local height = 16 + #lines * 15
     local viewport = viewportSize()
     local x = clamp(Library._mouse.X + 14, 6, viewport.X - width - 6)
     local y = clamp(Library._mouse.Y + 18, 6, viewport.Y - height - 6)
-    local background = namedDrawing(self, "tooltip:background", "Square", { Filled = true })
+    if not self._tooltipRound then
+        self._tooltipRound = RoundRect.new(self, "tooltip")
+    end
+    self._tooltipRound:Set(vector(x, y), vector(width, height), self.Settings.Radius, self.Theme.Popup, alpha, zIndex, true)
     local border = namedDrawing(self, "tooltip:border", "Square", { Filled = false })
-    showSquare(background, rect(x, y, width, height), self.Theme.Popup, alpha, zIndex)
     showSquare(border, rect(x, y, width, height), self.Theme.Border, alpha, zIndex + 1, false, 1)
+    local accentLine = namedDrawing(self, "tooltip:accent", "Square", { Filled = true })
+    showSquare(accentLine, rect(x, y, 2, height), self.Theme.Accent, alpha, zIndex + 1)
     for index, line in ipairs(lines) do
         local drawing = namedDrawing(self, "tooltip:line:" .. index, "Text")
-        showText(drawing, line, vector(x + 10, y + 7 + (index - 1) * 15), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 2)
+        showText(drawing, line, vector(x + 12, y + 8 + (index - 1) * 15), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 2)
     end
 end
 
@@ -3699,12 +3739,15 @@ function Window:_renderWatermark(zIndex, alpha)
     watermark.Position = vector(clamp(watermark.Position.X, 0, viewport.X - width), clamp(watermark.Position.Y, 0, viewport.Y - height))
     local targetRect = rect(watermark.Position.X, watermark.Position.Y, width, height)
     watermark.Bounds = targetRect
-    local background = namedDrawing(watermark, "watermark:background", "Square", { Filled = true })
+    if not self._watermarkRound then
+        self._watermarkRound = RoundRect.new(self, "watermark")
+    end
+    self._watermarkRound:Set(vector(targetRect.X, targetRect.Y), vector(targetRect.W, targetRect.H), self.Settings.Radius, self.Theme.Popup, alpha * 0.92, zIndex, true)
     local accent = namedDrawing(watermark, "watermark:accent", "Square", { Filled = true })
-    local text = namedDrawing(watermark, "watermark:text", "Text")
-    showSquare(background, targetRect, self.Theme.Popup, alpha * 0.92, zIndex)
     showSquare(accent, rect(targetRect.X, targetRect.Y, 3, targetRect.H), self.Theme.Accent, alpha, zIndex + 1)
-    showText(text, content, vector(targetRect.X + 12, targetRect.Y + 7), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 2)
+    renderIcon(watermark, "watermark:icon", "globe", vector(targetRect.X + 8, targetRect.Y + 6), 15, self.Theme.Accent, alpha, zIndex + 2)
+    local text = namedDrawing(watermark, "watermark:text", "Text")
+    showText(text, content, vector(targetRect.X + 26, targetRect.Y + 7), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 2)
     watermark.Region.Rect = targetRect
     watermark.Region.Z = zIndex + 10
     registerRegion(self, watermark.Region)
@@ -3832,7 +3875,8 @@ function Window:_renderKeybindList(zIndex, alpha)
     showSquare(border, bounds, self.Theme.Border, alpha, zIndex + 1, false, 1)
     showSquare(header, rect(bounds.X, bounds.Y, bounds.W, headerHeight), self.Theme.Header, alpha, zIndex + 2)
     local title = namedDrawing(widget, "keylist:title", "Text")
-    showText(title, widget.Title, vector(bounds.X + 11, bounds.Y + 9), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, alpha, zIndex + 4, false, true)
+    renderIcon(widget, "keylist:icon", "keyboard", vector(bounds.X + 11, bounds.Y + 9), 16, self.Theme.Accent, alpha, zIndex + 4)
+    showText(title, widget.Title, vector(bounds.X + 30, bounds.Y + 9), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, alpha, zIndex + 4, false, true)
     local count = namedDrawing(widget, "keylist:count", "Text")
     showText(count, tostring(#bindings), vector(bounds.X + bounds.W - 18, bounds.Y + 9), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.Font, alpha, zIndex + 4, true, true)
     widget.HeaderRegion.Rect = rect(bounds.X, bounds.Y, bounds.W, headerHeight)
@@ -4575,7 +4619,7 @@ function Window:_buildConfigTab()
     self._configTab = tab
     local configs = tab:AddSection({
         Name = "Configuration Manager",
-        Description = "Create, save, restore, and auto-load profiles.",
+        Icon = "folder",
         FullWidth = false,
         Side = "Left",
     })
@@ -4606,10 +4650,12 @@ function Window:_buildConfigTab()
     end
     configs:AddButton({
         Name = "Refresh profiles",
+        Icon = "refresh",
         Callback = function() updateList(true) end,
     })
     configs:AddButton({
         Name = "Create profile",
+        Icon = "plus",
         Callback = function()
             local ok, result = self.Config:Create(nameInput:Get())
             self:Notify({ Type = ok and "Success" or "Error", Title = ok and "Profile created" or "Create failed", Description = tostring(result) })
@@ -4618,6 +4664,7 @@ function Window:_buildConfigTab()
     })
     configs:AddButton({
         Name = "Save selected",
+        Icon = "save",
         Callback = function()
             local selected = self.Config.Selected or profileList:Get()
             local ok, result = self.Config:Save(selected, true)
@@ -4626,6 +4673,7 @@ function Window:_buildConfigTab()
     })
     configs:AddButton({
         Name = "Load selected",
+        Icon = "download",
         Callback = function()
             local selected = self.Config.Selected or profileList:Get()
             local ok, result = self.Config:Load(selected)
@@ -4634,6 +4682,7 @@ function Window:_buildConfigTab()
     })
     configs:AddButton({
         Name = "Delete selected",
+        Icon = "trash",
         Callback = function()
             local selected = self.Config.Selected or profileList:Get()
             self:Prompt({
@@ -4663,7 +4712,7 @@ function Window:_buildConfigTab()
 
     local appearance = tab:AddSection({
         Name = "Appearance and Motion",
-        Description = "Runtime theme and rendering preferences.",
+        Icon = "palette",
         Side = "Right",
     })
     controls.Animations = appearance:AddToggle({
@@ -4698,6 +4747,7 @@ function Window:_buildConfigTab()
     })
     appearance:AddButton({
         Name = "Refresh saved themes",
+        Icon = "refresh",
         Callback = function()
             Library:LoadSavedThemes()
             local options = {}
@@ -4714,7 +4764,7 @@ function Window:_buildConfigTab()
     })
     appearance:AddButton({
         Name = "Open Theme Editor",
-        Description = "Adjust colors and transparency for every theme token.",
+        Icon = "palette",
         Callback = function()
             self:OpenThemeEditor()
         end,
@@ -4722,7 +4772,7 @@ function Window:_buildConfigTab()
 
     local overlays = tab:AddSection({
         Name = "Floating Overlays",
-        Description = "Independent, draggable monitoring widgets.",
+        Icon = "layers",
         FullWidth = true,
     })
     controls.Watermark = overlays:AddToggle({
@@ -4879,50 +4929,26 @@ function Window:_themeAlpha(tokenKey, baseAlpha)
     return baseAlpha * clamp(t, 0, 1)
 end
 
-function Window:_updateThemeEditorPosition()
-    if not self._themeEditor or not self._themeEditor.Open then return end
-    local editor = self._themeEditor
-    local vp = viewportSize()
-    local ew = editor.PanelWidth or 690
-    local eh = editor.PanelHeight or 320
-    local ex = self._position.X + self._size.X + 14
-    local ey = self._position.Y
-    ex = clamp(ex, 8, max(8, vp.X - ew - 8))
-    ey = clamp(ey, 8, max(8, vp.Y - eh - 8))
-    editor.Position = vector(ex, ey)
-end
+
 
 function Window:OpenThemeEditor()
     if self._themeEditor and self._themeEditor.Open then
         return self
     end
-    local colWidth = 180
-    local rowHeight = 28
-    local headerHeight = 38
-    local sectionHeaderHeight = 22
-    local maxRows = 0
-    for _, col in ipairs(ThemeEditorColumns) do
-        maxRows = max(maxRows, #col.Tokens)
-    end
-    local contentHeight = sectionHeaderHeight + maxRows * rowHeight
-    local panelWidth = #ThemeEditorColumns * colWidth + (#ThemeEditorColumns - 1) * 8 + 24
-    local panelHeight = headerHeight + contentHeight + 16
+    local vp = viewportSize()
+    local panelWidth = min(780, vp.X - 48)
+    local panelHeight = min(520, vp.Y - 48)
     self._themeEditor = {
         Open = true,
-        Position = vector(self._position.X + self._size.X + 14, self._position.Y),
+        Position = vector((vp.X - panelWidth) / 2, (vp.Y - panelHeight) / 2),
         PanelWidth = panelWidth,
         PanelHeight = panelHeight,
         TokenProxies = {},
-        SliderRegions = {},
-        HexRegions = {},
         ActiveHexEdit = nil,
+        SaveBuffer = "",
+        Scroll = 0,
     }
     local editor = self._themeEditor
-    local vp = viewportSize()
-    editor.Position = vector(
-        clamp(editor.Position.X, 8, max(8, vp.X - panelWidth - 8)),
-        clamp(editor.Position.Y, 8, max(8, vp.Y - panelHeight - 8))
-    )
     for _, col in ipairs(ThemeEditorColumns) do
         for _, token in ipairs(col.Tokens) do
             local proxy = {
@@ -4948,17 +4974,6 @@ function Window:OpenThemeEditor()
             editor.TokenProxies[token.Key] = proxy
         end
     end
-    editor.DragRegion = {
-        Z = 0,
-        OnBegan = function(input, pointerOrigin)
-            if isPrimaryPointer(input) then
-                local positionOrigin = editor.Position
-                Library:_capturePointer(self, function(current)
-                    editor.Position = positionOrigin + (current - pointerOrigin)
-                end)
-            end
-        end,
-    }
     editor.CloseRegion = {
         Z = 0,
         OnBegan = function(input)
@@ -4973,10 +4988,11 @@ function Window:OpenThemeEditor()
             if isPrimaryPointer(input) then
                 self:_focusText({
                     Kind = "ThemeSave",
-                    Buffer = "",
+                    Buffer = editor.SaveBuffer,
                     MaxLength = 32,
                     Commit = function(buffer)
                         if buffer and #buffer > 0 then
+                            editor.SaveBuffer = buffer
                             local themeData = {}
                             for _, col in ipairs(ThemeEditorColumns) do
                                 for _, token in ipairs(col.Tokens) do
@@ -4988,12 +5004,36 @@ function Window:OpenThemeEditor()
                             end
                             Library:SaveThemeToFile(buffer, themeData)
                             Library.SavedThemes[buffer] = themeData
-                            self:Notify({ Type = "Success", Title = "Theme saved", Description = "'" .. buffer .. "' was saved. Select it from the theme dropdown." })
+                            self:Notify({ Type = "Success", Title = "Theme saved", Description = "'" .. buffer .. "' was saved successfully. Select it from the theme dropdown." })
                         end
                     end,
                 })
             end
         end,
+    }
+    editor.ResetRegion = {
+        Z = 0,
+        OnBegan = function(input)
+            if isPrimaryPointer(input) then
+                self._themePatch = {}
+                self.Theme = copy(Library.Theme)
+                for _, col in ipairs(ThemeEditorColumns) do
+                    for _, token in ipairs(col.Tokens) do
+                        if editor.TokenProxies[token.Key] then
+                            editor.TokenProxies[token.Key].Value = self.Theme[token.Key]
+                        end
+                    end
+                end
+                self.ThemeTransparency = {}
+            end
+        end,
+    }
+    editor.WheelRegion = {
+        Z = 0,
+        OnWheel = function(direction)
+            editor.Scroll = max(0, editor.Scroll - direction * 30)
+        end,
+        OnBegan = function() end,
     }
     return self
 end
@@ -5013,18 +5053,13 @@ function Window:_renderThemeEditor(deltaTime, baseZ, alpha)
     local factor = animationFactor(self.Settings, deltaTime)
     editor.Progress = animateNumber(editor.Progress or 0, 1, factor)
     local edAlpha = alpha * editor.Progress
-    local headerHeight = 38
-    local colWidth = 180
-    local rowHeight = 28
-    local sectionHeaderHeight = 22
-    local panelWidth = editor.PanelWidth or 690
-    local panelHeight = editor.PanelHeight or 320
+    local vp = viewportSize()
+    local panelWidth = editor.PanelWidth or 780
+    local panelHeight = editor.PanelHeight or 520
     local x = editor.Position.X
     local y = editor.Position.Y
-    local vp = viewportSize()
-    x = clamp(x, 8, max(8, vp.X - panelWidth - 8))
-    y = clamp(y, 8, max(8, vp.Y - panelHeight - 8))
-    editor.Position = vector(x, y)
+    local overlayBg = namedDrawing(self, "themeEditor:overlay", "Square", { Filled = true })
+    showSquare(overlayBg, rect(0, 0, vp.X, vp.Y), Color3.new(0, 0, 0), edAlpha * 0.5, baseZ - 1)
     local panelRect = rect(x, y, panelWidth, panelHeight)
     editor.PanelRect = panelRect
     if not self._themeEditorRound then
@@ -5032,43 +5067,66 @@ function Window:_renderThemeEditor(deltaTime, baseZ, alpha)
     end
     self._themeEditorRound:Set(
         vector(x, y), vector(panelWidth, panelHeight),
-        self.Settings.Radius, self.Theme.Popup, edAlpha, baseZ, true
+        self.Settings.Radius + 2, self.Theme.Popup, edAlpha, baseZ, true
     )
     local border = namedDrawing(self, "themeEditor:border", "Square", { Filled = false })
     showSquare(border, panelRect, self.Theme.Border, edAlpha, baseZ + 1, false, 1)
+    local headerHeight = 50
     local headerRect = rect(x, y, panelWidth, headerHeight)
     local headerBg = namedDrawing(self, "themeEditor:header", "Square", { Filled = true })
     showSquare(headerBg, headerRect, self.Theme.Header, edAlpha, baseZ + 2)
     local title = namedDrawing(self, "themeEditor:title", "Text")
-    showText(title, "Theme Editor", vector(x + 12, y + 10), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, edAlpha, baseZ + 4, false, true)
+    renderIcon(self, "themeEditor:icon", "palette", vector(x + 14, y + 14), 20, self.Theme.Accent, edAlpha, baseZ + 5)
+    showText(title, "Theme Editor", vector(x + 42, y + 14), self.Theme.Text, self.Settings.TitleFontSize, self.Settings.Font, edAlpha, baseZ + 5, false, true)
+    local saveBg = namedDrawing(self, "themeEditor:saveBg", "Square", { Filled = true })
+    local saveRect = rect(x + panelWidth - 175, y + 12, 70, 28)
+    showSquare(saveBg, saveRect, self.Theme.Accent, edAlpha, baseZ + 3)
     local saveText = namedDrawing(self, "themeEditor:saveLabel", "Text")
-    showText(saveText, "Save", vector(x + panelWidth - 90, y + 11), self.Theme.Accent, self.Settings.SmallFontSize, self.Settings.Font, edAlpha, baseZ + 4, false, true)
-    editor.SaveRegion.Rect = rect(x + panelWidth - 105, y + 3, 60, 28)
+    showText(saveText, "Save", vector(saveRect.X + saveRect.W / 2, saveRect.Y + 7), Color3.new(1, 1, 1), self.Settings.FontSize, self.Settings.Font, edAlpha, baseZ + 5, true, true)
+    editor.SaveRegion.Rect = saveRect
     editor.SaveRegion.Z = baseZ + 20
     registerRegion(self, editor.SaveRegion)
+    local resetBg = namedDrawing(self, "themeEditor:resetBg", "Square", { Filled = true })
+    local resetRect = rect(x + panelWidth - 95, y + 12, 70, 28)
+    showSquare(resetBg, resetRect, self.Theme.CardHover, edAlpha, baseZ + 3)
+    local resetText = namedDrawing(self, "themeEditor:resetLabel", "Text")
+    showText(resetText, "Reset", vector(resetRect.X + resetRect.W / 2, resetRect.Y + 7), self.Theme.Text, self.Settings.FontSize, self.Settings.Font, edAlpha, baseZ + 5, true, true)
+    editor.ResetRegion.Rect = resetRect
+    editor.ResetRegion.Z = baseZ + 20
+    registerRegion(self, editor.ResetRegion)
     local closeText = namedDrawing(self, "themeEditor:close", "Text")
-    showText(closeText, "x", vector(x + panelWidth - 17, y + 9), self.Theme.TextSecondary, self.Settings.FontSize, self.Settings.Font, edAlpha, baseZ + 4, true)
-    editor.CloseRegion.Rect = rect(x + panelWidth - 32, y + 3, 29, 28)
+    showText(closeText, "x", vector(x + panelWidth - 22, y + 14), self.Theme.TextSecondary, self.Settings.FontSize + 2, self.Settings.Font, edAlpha, baseZ + 5, true, true)
+    editor.CloseRegion.Rect = rect(x + panelWidth - 36, y + 6, 32, 32)
     editor.CloseRegion.Z = baseZ + 20
     registerRegion(self, editor.CloseRegion)
-    editor.DragRegion.Rect = headerRect
-    editor.DragRegion.Z = baseZ + 15
-    registerRegion(self, editor.DragRegion)
-    local contentY = y + headerHeight + 8
+    editor.WheelRegion.Rect = panelRect
+    editor.WheelRegion.Z = baseZ + 5
+    registerRegion(self, editor.WheelRegion)
+    local contentY = y + headerHeight + 12
+    local colWidth = floor((panelWidth - 36) / #ThemeEditorColumns)
+    local rowHeight = 32
+    local sectionHeaderHeight = 26
+    local maxScrollRows = floor((panelHeight - headerHeight - 60) / rowHeight)
     for colIdx, col in ipairs(ThemeEditorColumns) do
-        local colX = x + 12 + (colIdx - 1) * (colWidth + 8)
+        local colX = x + 12 + (colIdx - 1) * (colWidth + 4)
         local sectionLabel = namedDrawing(self, "themeEditor:section:" .. colIdx, "Text")
-        showText(sectionLabel, col.Title, vector(colX, contentY), self.Theme.Accent, self.Settings.SmallFontSize, self.Settings.Font, edAlpha, baseZ + 4, false, true)
+        showText(sectionLabel, col.Title, vector(colX, contentY), self.Theme.Accent, self.Settings.SmallFontSize + 1, self.Settings.Font, edAlpha, baseZ + 4, false, true)
         for rowIdx, token in ipairs(col.Tokens) do
             local rowY = contentY + sectionHeaderHeight + (rowIdx - 1) * rowHeight
+            if rowY + rowHeight > y + panelHeight - 12 then break end
             local proxy = editor.TokenProxies[token.Key]
             local label = namedDrawing(self, "themeEditor:label:" .. colIdx .. ":" .. rowIdx, "Text")
-            showText(label, trimText(token.Label, 60, self.Settings.SmallFontSize), vector(colX, rowY + 6), self.Theme.Text, self.Settings.SmallFontSize, self.Settings.Font, edAlpha, baseZ + 4, false, true)
-            local swatchRect = rect(colX + 64, rowY + 4, 16, 16)
+            showText(label, trimText(token.Label, 72, self.Settings.SmallFontSize), vector(colX, rowY + 8), self.Theme.Text, self.Settings.SmallFontSize, self.Settings.Font, edAlpha, baseZ + 4, false, true)
+            local swatchRect = rect(colX + 76, rowY + 5, 20, 20)
             local swatch = namedDrawing(self, "themeEditor:swatch:" .. colIdx .. ":" .. rowIdx, "Square", { Filled = true })
             showSquare(swatch, swatchRect, proxy.Value, edAlpha, baseZ + 4)
             local swatchBorder = namedDrawing(self, "themeEditor:swatchBorder:" .. colIdx .. ":" .. rowIdx, "Square", { Filled = false })
             showSquare(swatchBorder, swatchRect, self.Theme.Border, edAlpha, baseZ + 5, false, 1)
+            local swatchHovered = pointIn(Library._mouse, swatchRect)
+            if swatchHovered then
+                local swatchHover = namedDrawing(self, "themeEditor:swatchHover:" .. colIdx .. ":" .. rowIdx, "Square", { Filled = false })
+                showSquare(swatchHover, swatchRect, self.Theme.Accent, edAlpha, baseZ + 6, false, 1.5)
+            end
             local swatchRegion = {
                 Z = baseZ + 12,
                 OnBegan = function(input)
@@ -5082,7 +5140,7 @@ function Window:_renderThemeEditor(deltaTime, baseZ, alpha)
             local hex = colorToHex(proxy.Value)
             local hexKey = colIdx .. ":" .. rowIdx
             local isEditing = editor.ActiveHexEdit == hexKey
-            local hexRect = rect(colX + 84, rowY + 3, 36, 18)
+            local hexRect = rect(colX + 100, rowY + 4, 48, 22)
             if isEditing then
                 local focusBuf = self._focus and self._focus.Buffer or hex
                 local hexBg = namedDrawing(self, "themeEditor:hexBg:" .. hexKey, "Square", { Filled = true })
@@ -5090,15 +5148,10 @@ function Window:_renderThemeEditor(deltaTime, baseZ, alpha)
                 local hexInputBorder = namedDrawing(self, "themeEditor:hexBorder:" .. hexKey, "Square", { Filled = false })
                 showSquare(hexInputBorder, hexRect, self.Theme.Accent, edAlpha, baseZ + 5, false, 1)
                 local hexDrawing = namedDrawing(self, "themeEditor:hexText:" .. hexKey, "Text")
-                showText(hexDrawing, focusBuf, vector(hexRect.X + 3, rowY + 6), self.Theme.Text, self.Settings.SmallFontSize - 1, self.Settings.MonoFont, edAlpha, baseZ + 6, false)
+                showText(hexDrawing, focusBuf, vector(hexRect.X + 4, rowY + 7), self.Theme.Text, self.Settings.SmallFontSize, self.Settings.MonoFont, edAlpha, baseZ + 6, false)
             else
                 local hexDrawing = namedDrawing(self, "themeEditor:hexText:" .. hexKey, "Text")
-                showText(hexDrawing, hex, vector(hexRect.X + 3, rowY + 6), self.Theme.TextSecondary, self.Settings.SmallFontSize - 1, self.Settings.MonoFont, edAlpha, baseZ + 4, false)
-                local hexHovered = pointIn(Library._mouse, hexRect)
-                if hexHovered then
-                    local hexHoverBg = namedDrawing(self, "themeEditor:hexHover:" .. hexKey, "Square", { Filled = true })
-                    showSquare(hexHoverBg, hexRect, self.Theme.CardHover, edAlpha * 0.5, baseZ + 3)
-                end
+                showText(hexDrawing, hex, vector(hexRect.X + 4, rowY + 7), self.Theme.TextSecondary, self.Settings.SmallFontSize, self.Settings.MonoFont, edAlpha, baseZ + 4, false)
                 local hexRegion = {
                     Z = baseZ + 12,
                     OnBegan = function(input)
@@ -5128,23 +5181,23 @@ function Window:_renderThemeEditor(deltaTime, baseZ, alpha)
                 registerRegion(self, hexRegion)
             end
             local sliderLabel = namedDrawing(self, "themeEditor:opacityLabel:" .. colIdx .. ":" .. rowIdx, "Text")
-            showText(sliderLabel, "A", vector(colX + 124, rowY + 6), self.Theme.TextDisabled, self.Settings.SmallFontSize - 2, self.Settings.MonoFont, edAlpha, baseZ + 4, false)
-            local sliderBgRect = rect(colX + 134, rowY + 10, 32, 4)
+            showText(sliderLabel, "A", vector(colX + 152, rowY + 8), self.Theme.TextDisabled, self.Settings.SmallFontSize, self.Settings.MonoFont, edAlpha, baseZ + 4, false)
+            local sliderBgRect = rect(colX + 164, rowY + 12, colWidth - 180, 5)
             local sliderBg = namedDrawing(self, "themeEditor:sliderBg:" .. colIdx .. ":" .. rowIdx, "Square", { Filled = true })
             showSquare(sliderBg, sliderBgRect, self.Theme.SliderTrack, edAlpha, baseZ + 4)
             local currentTransparency = self.ThemeTransparency and self.ThemeTransparency[token.Key] or 1
-            local sliderFillWidth = 32 * currentTransparency
+            local sliderFillWidth = sliderBgRect.W * currentTransparency
             local sliderFill = namedDrawing(self, "themeEditor:sliderFill:" .. colIdx .. ":" .. rowIdx, "Square", { Filled = true })
             showSquare(sliderFill, rect(sliderBgRect.X, sliderBgRect.Y, sliderFillWidth, sliderBgRect.H), self.Theme.Accent, edAlpha, baseZ + 5)
             local thumbX = sliderBgRect.X + sliderFillWidth
             local thumb = namedDrawing(self, "themeEditor:thumb:" .. colIdx .. ":" .. rowIdx, "Circle", { Filled = true, NumSides = 16 })
             setDrawing(thumb, {
                 Position = vector(thumbX, sliderBgRect.Y + sliderBgRect.H / 2),
-                Radius = 4, NumSides = 16, Filled = true, Color = self.Theme.Text,
+                Radius = 5, NumSides = 16, Filled = true, Color = self.Theme.Text,
                 Transparency = edAlpha, ZIndex = baseZ + 6, Visible = true,
             })
             local pctText = namedDrawing(self, "themeEditor:pct:" .. colIdx .. ":" .. rowIdx, "Text")
-            showText(pctText, tostring(floor(currentTransparency * 100 + 0.5)) .. "%", vector(sliderBgRect.X + sliderBgRect.W + 3, rowY + 5), self.Theme.TextDisabled, self.Settings.SmallFontSize - 2, self.Settings.MonoFont, edAlpha, baseZ + 4, false)
+            showText(pctText, tostring(floor(currentTransparency * 100 + 0.5)) .. "%", vector(sliderBgRect.X + sliderBgRect.W + 4, rowY + 7), self.Theme.TextDisabled, self.Settings.SmallFontSize - 1, self.Settings.MonoFont, edAlpha, baseZ + 4, false)
             local sliderRegion = {
                 Z = baseZ + 12,
                 OnBegan = function(input, position)
@@ -5588,6 +5641,64 @@ Library.Icons.shield = {
         { 0.84, 0.24, 0.84, 0.52, 1.6 },
         { 0.16, 0.52, 0.50, 0.88, 1.6 },
         { 0.84, 0.52, 0.50, 0.88, 1.6 },
+    },
+}
+
+Library.Icons.info = {
+    Lines = {
+        { 0.50, 0.16, 0.50, 0.16, 2.2 },
+        { 0.50, 0.22, 0.50, 0.52, 1.7 },
+        { 0.50, 0.68, 0.50, 0.84, 1.7 },
+    },
+}
+
+Library.Icons.alert_triangle = {
+    Lines = {
+        { 0.50, 0.14, 0.12, 0.86, 1.8 },
+        { 0.50, 0.14, 0.88, 0.86, 1.8 },
+        { 0.12, 0.86, 0.88, 0.86, 1.8 },
+        { 0.50, 0.42, 0.50, 0.42, 2.2 },
+        { 0.50, 0.58, 0.50, 0.68, 1.7 },
+    },
+}
+
+Library.Icons.play = {
+    Lines = {
+        { 0.22, 0.14, 0.22, 0.86, 1.7 },
+        { 0.22, 0.14, 0.82, 0.50, 1.7 },
+        { 0.22, 0.86, 0.82, 0.50, 1.7 },
+    },
+}
+
+Library.Icons.toggle_left = {
+    Lines = {
+        { 0.82, 0.50, 0.82, 0.50, 2.0 },
+        { 0.82, 0.50, 0.82, 0.50, 2.0 },
+        { 0.38, 0.30, 0.62, 0.30, 1.5 },
+        { 0.38, 0.30, 0.38, 0.70, 1.5 },
+        { 0.62, 0.30, 0.62, 0.70, 1.5 },
+        { 0.38, 0.70, 0.62, 0.70, 1.5 },
+        { 0.44, 0.42, 0.44, 0.42, 2.2 },
+        { 0.56, 0.42, 0.56, 0.58, 1.7 },
+    },
+}
+
+Library.Icons.sliders = {
+    Lines = {
+        { 0.24, 0.14, 0.24, 0.86, 1.6 },
+        { 0.50, 0.14, 0.50, 0.86, 1.6 },
+        { 0.76, 0.14, 0.76, 0.86, 1.6 },
+        { 0.14, 0.34, 0.34, 0.34, 1.6 },
+        { 0.40, 0.56, 0.60, 0.56, 1.6 },
+        { 0.66, 0.24, 0.86, 0.24, 1.6 },
+    },
+}
+
+Library.Icons.type = {
+    Lines = {
+        { 0.16, 0.14, 0.84, 0.14, 1.6 },
+        { 0.50, 0.14, 0.50, 0.86, 1.6 },
+        { 0.30, 0.86, 0.70, 0.86, 1.6 },
     },
 }
 
